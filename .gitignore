@@ -1,0 +1,34 @@
+# Build and packaging artifacts
+build/
+dist/
+outputs/
+*.apk
+*.idsig
+*.dex
+*.class
+*.ap_
+*.flat
+source-manifest.json
+
+# Signing keys and credentials
+*.keystore
+*.jks
+*.pem
+*.key
+*.p12
+.env
+.env.*
+
+# Device traces and private runtime snapshots
+*.private.*
+native-trace.enabled
+config.json
+status.json
+
+# Python / OS / IDE files
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/
+*.iml
