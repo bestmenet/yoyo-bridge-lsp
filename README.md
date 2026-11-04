@@ -1,4 +1,4 @@
-# YOYO Bridge LSPosed 2.0
+# YOYO Bridge LSPosed 2.1.0（协议观测与会话修复）
 
 独立 LSPosed APK。管理页使用 Android 原生 Material Views，不含 WebView 或 WebUI。桥接网关由模块注入 YOYO 主进程，在 Application.attach 后启动，随 YOYO 进程退出。
 
@@ -25,3 +25,17 @@ LSPosed 保留 yoyo_bridge 模型入口，并在 PRO 选择本模块时拦截 Ai
 签名 keystore 在 build/helper/helper.keystore，缺失时生成本地开发证书；覆盖安装需要复用原证书。
 
 运行 BRIDGE_JSON_JAR="$PWD/build/tools/json.jar" python3 tests/test_backend.py。自动测试验证本地协议 fixture；真机模型、GUI 执行和微信状态的结果见验收报告。
+
+## 本次协议调查范围
+
+2.1.0 按 YOYO 原生 UI 的 FwConversationTopicManager 正数话题 ID 隔离第三方模型历史。未建立有效话题 ID 时使用单次隔离调用，避免负数哨兵串话。在当前进程中最多保留 8 个会话，每会话 64 条消息和 512 KiB 历史；进程重启不恢复该缓存，也尚未导入之前由荣耀模型产生的历史。模型、端点、密钥或执行配置变化会重建对应会话。
+
+启用本机执行器不会隐藏 gui.create / task-result-query。原生工具优先，本机 UI 操作只作可选回退。YOYO 原生定时任务必须经过实际工作流工具与保存链路，不能用闹钟代替。网关 URL 只在实际选中 Bridge 自定义模型时切到本地。
+
+可选协议记录：在 YOYO 私有 files/yoyo-lsp/ 下创建 native-trace.enabled 标记启用，移除即停止写入。每进程一个 native-trace-<pid>.private.jsonl，16 MiB 轮转保留一份旧文件。原始日志可能包含个人上下文，只留在私有目录，禁止随 APK 或源码分享。正式使用前关闭记录。记录器只观察，不修改原生方法参数和结果。
+
+本版本尚未实现完整的荣耀主对话、工作流和 DSL 服务替代；原文本桥接入口仍存在，不能把本版本称为与官方完全无差别。配套协议边界报告说明当前证据与未验证部分。
+
+源码包不包含 API key、设备配置、抓取日志、原生 APK、签名私钥或第三方框架副本。覆盖现有安装需继续使用原有本地签名证书。
+
+`tests/fixtures/native-decoded-qa/` 保存 6 个由真实运行消息派生的脱敏协议样本，覆盖推理开始、工具状态、首块文本、最终结果、流结束及任务完成；provenance.json 记录原始证据文件摘要及行号。这些是解码后应用消息，不是原始网络抓包，也不是已实现的协议翻译器。

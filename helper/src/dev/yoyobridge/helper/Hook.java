@@ -63,11 +63,13 @@ public final class Hook implements IXposedHookLoadPackage {
     public void handleLoadPackage(LoadPackageParam loadPackageParam) {
         if (!TARGET_PACKAGE.equals(loadPackageParam.packageName)) return;
         targetClassLoader = loadPackageParam.classLoader;
+        NativeTrace.install(loadPackageParam.classLoader);
         installEmbeddedRuntime(loadPackageParam);
         installNativeTextBridge(loadPackageParam.classLoader);
         installModelListHook(loadPackageParam.classLoader);
         installCapabilityGateHooks(loadPackageParam.classLoader);
         installAllAppPolicyHooks(loadPackageParam.classLoader);
+        installWechatExecutionPolicy(loadPackageParam.classLoader);
     }
 
     private static final Set<Class<?>> interceptedProviders = new HashSet<>();
@@ -112,18 +114,21 @@ public final class Hook implements IXposedHookLoadPackage {
                                     }
                                     JSONObject config = runtimeConfig;
                                     Context context = cachedContext;
+                                    String conversationKey = nativeConversationKey(loader);
                                     new Thread(() -> {
                                         try {
                                             Bridge.useLocalState(new File(context.getFilesDir(), "yoyo-lsp"));
                                             NativeToolExecutor executor = new NativeToolExecutor(context, loader);
-                                            Bridge.runLocalTask(config, text, executor, (period, reply) -> {
+                                            Bridge.runLocalTask(config, text, conversationKey, executor, (period, reply) -> {
+                                                if (!conversationKey.isEmpty() && !conversationKey.equals(nativeConversationKey(loader))) return;
                                                 if ("thinking".equals(period)) showRobot(proxy,
                                                     "正在使用自定义模型 " + config.optString("model") + " 处理任务…");
                                                 else if ("message".equals(period) && !reply.isEmpty()) showRobot(proxy, reply);
                                             });
                                         } catch (Throwable error) {
                                             XposedBridge.log("YOYO Bridge: local model task error " + error.getClass().getSimpleName());
-                                            showRobot(proxy, "自定义模型桥接失败，请在 YOYO Bridge 查看日志。");
+                                            if (conversationKey.isEmpty() || conversationKey.equals(nativeConversationKey(loader)))
+                                                showRobot(proxy, "自定义模型桥接失败，请在 YOYO Bridge 查看日志。");
                                         } finally {
                                             localTaskRunning.set(false);
                                             report(context);
@@ -144,6 +149,19 @@ public final class Hook implements IXposedHookLoadPackage {
         } catch (Throwable error) {
             XposedBridge.log("YOYO Bridge: native text bridge hook failed: " + error);
         }
+    }
+
+    private static String nativeConversationKey(ClassLoader loader) {
+        try {
+            Class<?> manager = XposedHelpers.findClass(
+                "com.hihonor.magicvoice.frameworkui.topic.FwConversationTopicManager", loader);
+            Object instance = XposedHelpers.callStaticMethod(manager, "getInstance");
+            Object topic = XposedHelpers.callMethod(instance, "getTopicId");
+            long id = topic instanceof Number ? ((Number) topic).longValue() : -1;
+            // The UI creates the topic synchronously with its first input card.
+            // Pending negative IDs must never share a history cache entry.
+            return id > 0 ? "topic:" + id : "";
+        } catch (Throwable ignored) { return ""; }
     }
 
     private static void showRobot(Object proxy, String text) {
@@ -168,7 +186,7 @@ public final class Hook implements IXposedHookLoadPackage {
                 pkg.classLoader), "getClawWsUrl", new XC_MethodHook() {
                     @Override protected void beforeHookedMethod(MethodHookParam param) {
                         JSONObject config = runtimeConfig;
-                        if (config != null && config.optBoolean("enabled"))
+                        if (config != null && selectedCustom(pkg.classLoader))
                             param.setResult("ws://127.0.0.1:" + config.optInt("port", 38765)
                                 + "/aicloud/yoyo-claw-service/v2/yoyoclaw/connect");
                     }
@@ -177,6 +195,7 @@ public final class Hook implements IXposedHookLoadPackage {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     Context context = (Context) param.args[0];
                     cachedContext = context;
+                    NativeTrace.attach(context);
                     // URL hooks run in every process; only main process owns the socket server.
                     if (TARGET_PACKAGE.equals(pkg.processName)) {
                         BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -220,6 +239,10 @@ public final class Hook implements IXposedHookLoadPackage {
             if (runtimeConfig == null) return;
             File dir = new File(context.getFilesDir(), "yoyo-lsp");
             Bridge.startEmbedded(dir, runtimeConfig);
+            if (runtimeConfig.optBoolean("localExecution")) runtimeExecutor.execute(() -> {
+                try { context.getContentResolver().call(SETTINGS, "rootStart", null, null); }
+                catch (Throwable error) { XposedBridge.log("YOYO Bridge: local executor startup unavailable"); }
+            });
             if ("activate".equals(action)) {
                 SharedPreferences prefs = context.getSharedPreferences(TARGET_PACKAGE, Context.MODE_PRIVATE);
                 SharedPreferences backup = context.getSharedPreferences("yoyo_lsp_route_backup", Context.MODE_PRIVATE);
@@ -254,6 +277,38 @@ public final class Hook implements IXposedHookLoadPackage {
             bundle.putString("status", Bridge.embeddedStatus().toString());
             context.getContentResolver().call(SETTINGS, "report", null, bundle);
         } catch (Throwable ignored) {}
+    }
+
+    private static void installWechatExecutionPolicy(ClassLoader loader) {
+        try {
+            Class<?> agent = XposedHelpers.findClass("com.hihonor.magicvoice.business.CommonUIAgent", loader);
+            Class<?> action = XposedHelpers.findClass("com.hihonor.magicvoice.business.CommonUIAgent$AppTakeOverAction", loader);
+            Class<?> result = XposedHelpers.findClass("com.hihonor.magicvoice.business.CommonUIAgent$AppTakeOverResult", loader);
+            final Object proceed = java.lang.Enum.valueOf((Class) action, "CONTINUE");
+            XposedHelpers.findAndHookMethod(agent, "checkAppTakeOver", String.class, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    if (!"com.tencent.mm".equals(param.args[0]) || !selectedCustom(loader)) return;
+                    param.setResult(XposedHelpers.newInstance(result, proceed, null));
+                    XposedBridge.log("YOYO Bridge: WeChat local app takeover policy allowed for custom task");
+                }
+            });
+            Class<?> response = XposedHelpers.findClass("com.hihonor.magicvoice.cloud.UIAgentResponse", loader);
+            XposedHelpers.findAndHookMethod(agent, "afterCloud", response, long.class, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        Object data = XposedHelpers.callMethod(param.args[0], "getData");
+                        Object actions = XposedHelpers.callMethod(data, "getAction");
+                        Object summary = XposedHelpers.callMethod(data, "getSummarize");
+                        Object actionName = actions instanceof java.util.Map ? ((java.util.Map) actions).get("action") : "unknown";
+                        boolean forbidden = String.valueOf(summary).contains("不允许操控");
+                        XposedBridge.log("YOYO Bridge: GUI cloud action=" + actionName + " appForbidden=" + forbidden);
+                    } catch (Throwable ignored) {}
+                }
+            });
+            XposedBridge.log("YOYO Bridge: WeChat runtime execution policy hook ready");
+        } catch (Throwable error) {
+            XposedBridge.log("YOYO Bridge: WeChat runtime policy hook: " + error);
+        }
     }
 
     private static void installModelListHook(ClassLoader classLoader) {

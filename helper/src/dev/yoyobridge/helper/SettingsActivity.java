@@ -35,6 +35,7 @@ public final class SettingsActivity extends Activity {
     private CheckBox enabledInput;
     private CheckBox httpInput;
     private CheckBox streamInput;
+    private CheckBox localInput;
     private RadioGroup keyMode;
     private RadioButton keepKey;
     private RadioButton replaceKey;
@@ -103,6 +104,17 @@ public final class SettingsActivity extends Activity {
         page.addView(httpInput);
         streamInput = check("启用流式响应");
         page.addView(streamInput);
+        localInput = check("使用本机执行器操作界面");
+        page.addView(localInput);
+        Button startLocal = button("启动本机执行器（root）");
+        page.addView(startLocal, new LinearLayout.LayoutParams(-1, dp(52)));
+        startLocal.setOnClickListener(v -> new Thread(() -> {
+            boolean ok;
+            try { ok = NativeRootManager.start(this).optBoolean("ok"); }
+            catch (Exception error) { ok = false; }
+            final boolean active = ok;
+            main.post(() -> appendLog(active ? "本机执行器已启动" : "本机执行器未启动，请确认 root 授权后重试", false));
+        }, "local-executor-start").start());
         page.addView(label("最大工具调用轮数（1–24）"));
         roundsInput = edit("16", false);
         roundsInput.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -149,6 +161,7 @@ public final class SettingsActivity extends Activity {
             modelInput.setText(config.optString("model", ""));
             httpInput.setChecked(config.optBoolean("allowHttp", false));
             streamInput.setChecked(config.optBoolean("stream", false));
+            localInput.setChecked(config.optBoolean("localExecution", false));
             roundsInput.setText(String.valueOf(config.optInt("maxToolRounds", 16)));
             keyInput.setEnabled(false);
         } catch (Exception e) {
@@ -167,7 +180,7 @@ public final class SettingsActivity extends Activity {
         config.put("schemaVersion", 2).put("enabled", enabledInput.isChecked())
             .put("scope", "custom-provider-only").put("providerSlot", "yoyo_bridge")
             .put("endpoint", endpoint).put("model", model).put("allowHttp", httpInput.isChecked())
-            .put("stream", streamInput.isChecked()).put("port", config.optInt("port", 38765))
+            .put("stream", streamInput.isChecked()).put("localExecution", localInput.isChecked()).put("port", config.optInt("port", 38765))
             .put("maxToolRounds", rounds);
         if (keyMode.getCheckedRadioButtonId() == clearKey.getId()) config.put("apiKey", "");
         else if (keyMode.getCheckedRadioButtonId() == replaceKey.getId()) {
@@ -334,7 +347,6 @@ public final class SettingsActivity extends Activity {
         view.setHint(hint);
         view.setTextSize(16);
         view.setPadding(dp(12), 0, dp(12), 0);
-        view.setBackgroundResource(android.R.drawable.edit_text);
         view.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(52)));
         return view;
     }

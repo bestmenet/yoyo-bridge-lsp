@@ -1,0 +1,30 @@
+{
+  "scope": "Sanitized derived decoded app messages; NOT raw wire packets or server-side inference requests.",
+  "sourceSha256": "a964a4473b3a93ae628e1d7f1f156ff37bd8c332053ecb81c69bfc30fb9be0f5",
+  "records": [
+    {
+      "file": "infer-start.json",
+      "sourceLine": 19537
+    },
+    {
+      "file": "tool-running.json",
+      "sourceLine": 19627
+    },
+    {
+      "file": "qa-first-delta.json",
+      "sourceLine": 20147
+    },
+    {
+      "file": "qa-final-result.json",
+      "sourceLine": 27070
+    },
+    {
+      "file": "qa-done.json",
+      "sourceLine": 27118
+    },
+    {
+      "file": "finish-task.json",
+      "sourceLine": 28157
+    }
+  ]
+}

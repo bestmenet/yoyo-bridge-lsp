@@ -46,6 +46,10 @@ public final class NativeToolExecutor implements Bridge.LocalToolInvoker {
     @Override
     public JSONObject invoke(String name, String appPkg, JSONObject args) throws Exception {
         JSONObject safeArgs = args == null ? new JSONObject() : args;
+        if ("local.ui".equals(name)) {
+            JSONObject value = NativeRootClient.call(safeArgs);
+            return response(value.optBoolean("ok") ? 200 : 500, value.toString());
+        }
         if ("gui.create".equals(name)) {
             return invokeGuiCreate(safeArgs);
         }

@@ -1,0 +1,62 @@
+{
+  "businessTag": "MAIN",
+  "contexts": [],
+  "directives": [],
+  "errorCode": 0,
+  "eventType": "textRecognize",
+  "events": [
+    {
+      "header": {
+        "name": "FinishTask",
+        "namespace": "IntentService"
+      },
+      "payload": {
+        "jsonObject": {
+          "type": "normal",
+          "originQuery": "协议测试文本",
+          "planBoardId": "fixture-id-1",
+          "planType": "simple",
+          "userQuery": "协议测试文本",
+          "slug": "newpa",
+          "conversationId": "fixture-id-2",
+          "interactionId": 0,
+          "checkId": "fixture-id-3",
+          "sessionId": "fixture-id-4"
+        }
+      }
+    }
+  ],
+  "executorMessageType": 0,
+  "isAddQueueHeader": false,
+  "isLastNlp": true,
+  "lastTask": true,
+  "isSkipInterceptor": false,
+  "isTest": false,
+  "latency": 0,
+  "messageType": 304101,
+  "planId": "fixture-id-1",
+  "planType": "simple",
+  "refuseRecognizeFlag": 0,
+  "remoteDirectives": [],
+  "resultSourceType": 0,
+  "session": {
+    "appId": "fixture-appId",
+    "checkId": "fixture-id-3",
+    "devF": "fixture-devF",
+    "deviceId": "fixture-deviceId",
+    "dialogId": 2,
+    "interactionId": 0,
+    "isExperiencePlan": true,
+    "loginStatus": true,
+    "messageId": "fixture-messageId",
+    "messageName": "startRecognize",
+    "receiver": "DM",
+    "reqApiType": "stream",
+    "scope": "",
+    "sender": "com.hihonor.magicvoice",
+    "sessionId": "fixture-id-4",
+    "taskId": "",
+    "topicId": "fixture-id-2",
+    "uid": "fixture-uid"
+  }
+}

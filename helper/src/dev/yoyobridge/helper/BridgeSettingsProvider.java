@@ -54,7 +54,7 @@ public final class BridgeSettingsProvider extends ContentProvider {
             JSONObject saved = new JSONObject(new String(data, 0, used, StandardCharsets.UTF_8));
             JSONObject result = defaults();
             for (String key : new String[]{"enabled", "scope", "providerSlot", "endpoint", "apiKey",
-                    "model", "allowHttp", "stream", "port", "maxToolRounds", "upstreamWs"}) {
+                    "model", "allowHttp", "stream", "localExecution", "port", "maxToolRounds", "upstreamWs"}) {
                 if (saved.has(key)) result.put(key, saved.get(key));
             }
             return result;
@@ -82,6 +82,15 @@ public final class BridgeSettingsProvider extends ContentProvider {
     }
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
+        if ("rootStart".equals(method)) {
+            requireCaller();
+            long token = Binder.clearCallingIdentity();
+            try {
+                JSONObject state = NativeRootManager.start(getContext());
+                Bundle result = new Bundle(); result.putString("status", state.toString()); return result;
+            } catch (Exception error) { throw new IllegalStateException("local executor unavailable"); }
+            finally { Binder.restoreCallingIdentity(token); }
+        }
         if ("load".equals(method)) {
             requireCaller();
             Bundle result = new Bundle();
@@ -197,7 +206,7 @@ public final class BridgeSettingsProvider extends ContentProvider {
             value.put("schemaVersion", 2).put("enabled", false)
                 .put("scope", "custom-provider-only").put("providerSlot", "yoyo_bridge")
                 .put("endpoint", "").put("apiKey", "").put("model", "")
-                .put("allowHttp", false).put("stream", false).put("port", 38765)
+                .put("allowHttp", false).put("stream", false).put("localExecution", false).put("port", 38765)
                 .put("maxToolRounds", 16).put("upstreamWs", UPSTREAM_WS);
             return value;
         } catch (org.json.JSONException e) {

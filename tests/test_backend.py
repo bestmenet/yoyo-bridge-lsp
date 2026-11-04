@@ -46,6 +46,8 @@ class Provider(BaseHTTPRequestHandler):
                 message = self.native_message(payload["messages"])
             elif self.path == "/meta-flow":
                 message = self.meta_message(payload["messages"])
+            elif self.path == "/local-session":
+                message = self.local_session_message(payload["messages"])
             else:
                 message = {"role": "assistant", "content": "OK"}
             self.wfile.write(json.dumps({"choices": [{"message": message}]}).encode())
@@ -110,6 +112,24 @@ class Provider(BaseHTTPRequestHandler):
                 }],
             }
         return {"role": "assistant", "content": "DONE"}
+
+    @staticmethod
+    def local_session_message(messages):
+        if messages[-1].get("role") == "tool" and messages[-1].get("tool_call_id") == "second-call":
+            return {"role": "assistant", "content": "native complete"}
+        last_user = next((m.get("content", "") for m in reversed(messages)
+                          if m.get("role") == "user" and isinstance(m.get("content"), str)), "")
+        if last_user == "large-one":
+            return {"role": "assistant", "content": "x" * 600000}
+        if last_user in ("cause tool interruption", "native-on-second"):
+            return {"role": "assistant", "content": "", "tool_calls": [{
+                "id": "interrupted-call" if last_user == "cause tool interruption" else "second-call",
+                "type": "function",
+                "function": {"name": "yoyo_call_tool", "arguments": json.dumps({
+                    "name": "gui.create", "appPkg": "com.hihonor.magicvoice",
+                    "arguments": {"app_name": "微信", "task_query": "fixture"}})},
+            }]}
+        return {"role": "assistant", "content": "OK"}
 
 
 class WireSocket:
@@ -608,6 +628,84 @@ public class LocalBridgeCheck {
         response = json.loads(result.stdout)
         self.assertEqual(response["calls"], ["gui.create", "task-result-query"])
         self.assertEqual(response["replies"], ["DONE"])
+
+    def test_local_conversation_reuse_isolation_config_rotation_and_failure_repair(self):
+        self.server.receipts.clear()
+        source = self.directory.parent / "LocalSessionCheck.java"
+        source.write_text(r'''import dev.yoyobridge.Bridge;
+import org.json.*;
+public class LocalSessionCheck {
+ static Bridge.LocalToolInvoker invoker(final String label, JSONArray seen) {
+  return (name, app, input) -> { seen.put(label); if("failing".equals(label)) throw new Exception("fixture tool failure"); return new JSONObject().put("runStatus",200).put("result","{}"); };
+ }
+ static void run(JSONObject config,String text,String key,String label,JSONArray seen,JSONArray replies) throws Exception {
+  Bridge.runLocalTask(config,text,key,invoker(label,seen),(period,value)->{
+   if("message".equals(period)) replies.put(label+":"+value);
+  });
+ }
+ public static void main(String[] args) throws Exception {
+  JSONObject config=new JSONObject(args[0]); JSONArray seen=new JSONArray(), replies=new JSONArray();
+  run(config,"alpha","topic-A","first",seen,replies);
+  run(config,"native-on-second","topic-A","second",seen,replies);
+  run(config,"beta","topic-A","third",seen,replies);
+  run(config,"gamma","topic-B","other-topic",seen,replies);
+  JSONObject changed=new JSONObject(config.toString()).put("model","rotated-model");
+  run(changed,"delta","topic-A","rotated",seen,replies);
+  run(config,"cause tool interruption","failure-topic","failing",seen,replies);
+  run(config,"follow up","failure-topic","recovered",seen,replies);
+  for(int i=0;i<9;i++) run(config,"evict-"+i,"capacity-"+i,"cap",seen,replies);
+  run(config,"after eviction","capacity-0","evicted",seen,replies);
+  run(config,"large-one","large-history","large",seen,replies);
+  run(config,"large-two","large-history","large-next",seen,replies);
+  System.out.println(new JSONObject().put("seen",seen).put("replies",replies));
+ }
+}''')
+        javac = str(Path(JAVA).with_name("javac"))
+        classpath = f"{ROOT}/build/lsp/classes:{JSON_JAR}"
+        subprocess.run([javac, "--release", "8", "-cp", classpath,
+                        "-d", str(self.directory.parent), str(source)], capture_output=True, check=True)
+        result = subprocess.run([JAVA, "-cp", f"{self.directory.parent}:{classpath}",
+                                 "LocalSessionCheck", json.dumps(self.config(path="/local-session", localExecution=True))],
+                                capture_output=True, timeout=45, check=True)
+        response = json.loads(result.stdout)
+        requests = [payload for path, _, payload in self.server.receipts if path == "/local-session"]
+
+        beta = next(payload for payload in requests
+                    if payload["messages"][-1].get("content") == "beta")
+        beta_messages = beta["messages"]
+        self.assertIn("alpha", [m.get("content") for m in beta_messages])
+        self.assertIn("OK", [m.get("content") for m in beta_messages if m.get("role") == "assistant"])
+        prompt = beta_messages[0]["content"]
+        self.assertIn("gui.create", prompt)
+        self.assertIn("task-result-query", prompt)
+        self.assertIn("local.ui", prompt)
+        self.assertIn("YOYO workflow", prompt)
+        self.assertIn("不得用闹钟替代", prompt)
+        self.assertNotIn("荣耀云端GUI已禁止微信", prompt)
+
+        gamma = next(payload for payload in requests if payload["messages"][-1].get("content") == "gamma")
+        self.assertNotIn("alpha", [m.get("content") for m in gamma["messages"]])
+        delta = next(payload for payload in requests if payload["model"] == "rotated-model")
+        self.assertEqual([m.get("content") for m in delta["messages"] if m.get("role") == "user"], ["delta"])
+
+        recovered = next(payload for payload in requests
+                         if payload["messages"][-1].get("content") == "follow up")
+        self.assertFalse(any(m.get("tool_calls") for m in recovered["messages"]))
+        self.assertIn("second", response["seen"])
+        self.assertTrue(any(item == "recovered:OK" for item in response["replies"]))
+
+        after_eviction = next(payload for payload in requests
+                              if payload["messages"][-1].get("content") == "after eviction")
+        self.assertEqual([m.get("content") for m in after_eviction["messages"]
+                          if m.get("role") == "user"], ["after eviction"])
+
+        bounded = next(payload for payload in requests
+                       if payload["messages"][-1].get("content") == "large-two")
+        self.assertLessEqual(len(json.dumps(bounded["messages"], ensure_ascii=False)), 512 * 1024)
+        self.assertLessEqual(len(bounded["messages"]), 64)
+        self.assertEqual([m.get("content") for m in bounded["messages"] if m.get("role") == "user"],
+                         ["large-one", "large-two"])
+        self.assertFalse(any(m.get("tool_calls") for m in bounded["messages"]))
 
     def test_native_gui_creation_and_result_query_survive_mcp_context_update(self):
         port = self.free_port()

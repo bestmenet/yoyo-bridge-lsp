@@ -1,0 +1,61 @@
+{
+  "businessTag": "MAIN",
+  "contexts": [],
+  "directives": [
+    {
+      "header": {
+        "name": "commonQA",
+        "namespace": "MmqaResultAH"
+      },
+      "payload": {
+        "jsonObject": {
+          "planBoardId": "fixture-id-1",
+          "planType": "simple",
+          "data": "{\"toolExecuteResult\":{\"resultCode\":2,\"resultContent\":null,\"businessResult\":{\"answer\":\"协议测试文本\"}},\"runStatus\":\"200\",\"code\":\"0\",\"cnMessage\":\"成功\",\"success\":false,\"data\":{\"firstCostTime\":null,\"qaRequestId\":null,\"session\":{\"dialogId\":null,\"sessionId\":\"fixture-id-4\",\"interactionId\":null,\"checkId\":null,\"sysSessionId\":\"\",\"dataReflowType\":null,\"dmMessageId\":null},\"index\":38,\"isEnd\":true,\"cpRequestId\":\"\",\"cpErrorCode\":\"\",\"cpErrorMessage\":\"\",\"agent\":{\"serviceId\":\"fixture-serviceId\",\"serviceName\":\"\",\"avatar\":\"\",\"present\":0,\"sourceDisplayText\":\"协议测试文本\",\"mmlType\":\"1\",\"pState\":null,\"uniqueId\":null,\"version\":null},\"choice\":{\"message\":{\"role\":null,\"contentType\":null,\"content\":null,\"hybridContent\":{\"commands\":[{\"index\":0,\"head\":{\"namespace\":\"rich_text\",\"name\":\"\"},\"body\":\"\",\"answer\":null}],\"recommendPrompt\":null,\"recommendPrompts\":[],\"relatedContent\":null,\"clearSession\":0,\"speech\":null,\"dmCommand\":null}},\"finishReason\":\"\"},\"choices\":null,\"dataType\":\"llm\",\"qaTag\":\"\",\"availableAgents\":null,\"contentLayoutType\":0,\"personalLabels\":null,\"personalQaCode\":null,\"aiSubscribeH5CardUrl\":null,\"supportBusiness\":false}}",
+          "toolCallId": "fixture-id-5",
+          "planTaskId": "fixture-id-6",
+          "conversationId": "fixture-id-2",
+          "interactionId": 0,
+          "checkId": "fixture-id-3",
+          "sessionId": "fixture-id-4"
+        }
+      }
+    }
+  ],
+  "errorCode": 0,
+  "eventType": "textRecognize",
+  "events": [],
+  "executorMessageType": 0,
+  "isAddQueueHeader": false,
+  "isLastNlp": true,
+  "lastTask": true,
+  "isSkipInterceptor": false,
+  "isTest": false,
+  "latency": 0,
+  "messageType": 304101,
+  "planId": "fixture-id-1",
+  "planType": "simple",
+  "refuseRecognizeFlag": 0,
+  "remoteDirectives": [],
+  "resultSourceType": 0,
+  "session": {
+    "appId": "fixture-appId",
+    "checkId": "fixture-id-3",
+    "devF": "fixture-devF",
+    "deviceId": "fixture-deviceId",
+    "dialogId": 2,
+    "interactionId": 0,
+    "isExperiencePlan": true,
+    "loginStatus": true,
+    "messageId": "fixture-messageId",
+    "messageName": "startRecognize",
+    "receiver": "DM",
+    "reqApiType": "stream",
+    "scope": "",
+    "sender": "com.hihonor.magicvoice",
+    "sessionId": "fixture-id-4",
+    "taskId": "",
+    "topicId": "fixture-id-2",
+    "uid": "fixture-uid"
+  }
+}
