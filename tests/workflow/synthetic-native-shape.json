@@ -1,0 +1,66 @@
+{
+  "data": {
+    "event": {
+      "header": {
+        "namespace": "Tool.yoyoTask",
+        "name": "create_trigger_task"
+      },
+      "payload": {
+        "tasks": [
+          {
+            "tool": "create_trigger_task",
+            "toolId": "fixture-create_trigger_task",
+            "executeParams": {
+              "pluginId": "fixture-plugin",
+              "pkgName": "fixture.app",
+              "version": "1",
+              "toolDeps": {}
+            },
+            "parameters": {
+              "triggers": [
+                {
+                  "tool": "time_fence",
+                  "toolId": "fixture-time_fence",
+                  "executeParams": {
+                    "pluginId": "fixture-plugin",
+                    "pkgName": "fixture.app",
+                    "version": "1",
+                    "toolDeps": {}
+                  }
+                }
+              ],
+              "actions": [
+                {
+                  "tool": "gui_task_create",
+                  "toolId": "fixture-gui_task_create",
+                  "executeParams": {
+                    "pluginId": "fixture-plugin",
+                    "pkgName": "fixture.app",
+                    "version": "1",
+                    "toolDeps": {}
+                  },
+                  "mcpCall": {
+                    "name": "gui_task_create",
+                    "appPkg": "fixture.app",
+                    "arguments": {
+                      "task_query": "old test query",
+                      "taskMode": "default",
+                      "enableRewrite": "true",
+                      "showUser": "false",
+                      "business_id": "fixture",
+                      "showResult": "false"
+                    }
+                  }
+                }
+              ]
+            },
+            "extMap": {
+              "workflowId": "OLD_FIXTURE_ID",
+              "workflowRaw": "OLD_DSL"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

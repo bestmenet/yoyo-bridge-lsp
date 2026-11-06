@@ -8,8 +8,8 @@ import zipfile
 from pathlib import Path
 
 R = Path(__file__).resolve().parent
-VERSION_NAME = os.environ.get("VERSION_NAME", "2.1.0")
-VERSION_CODE = os.environ.get("VERSION_CODE", "201")
+VERSION_NAME = os.environ.get("VERSION_NAME", "2.2.0")
+VERSION_CODE = os.environ.get("VERSION_CODE", "202")
 
 
 def sdk_roots():

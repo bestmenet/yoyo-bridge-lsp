@@ -1,0 +1,3 @@
+These contract tests use a synthetic native event shape, not recorded wire data. They verify metadata filtering, event scoping, task isolation, timezone handling and the next daily occurrence. They do not validate native Android reflection, cloud conversion, storage or UI.
+
+Compile `TestMetadata.java`, `TestPayload.java` and the two helper sources `NativeWorkflowCapabilities.java` / `NativeWorkflowExecutor.java` with Java 8, the Android API jar and org.json. Run each main class with `synthetic-native-shape.json` as its argument. Android stubs must also be present on the runtime classpath for class loading.

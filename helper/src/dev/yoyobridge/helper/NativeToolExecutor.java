@@ -33,6 +33,7 @@ public final class NativeToolExecutor implements Bridge.LocalToolInvoker {
     private final ClassLoader loader;
     private final Handler mainHandler;
     private volatile Object guiHandler;
+    private final String workflowScope = UUID.randomUUID().toString();
 
     public NativeToolExecutor(Context context, ClassLoader loader) {
         if (context == null || loader == null) {
@@ -46,6 +47,15 @@ public final class NativeToolExecutor implements Bridge.LocalToolInvoker {
     @Override
     public JSONObject invoke(String name, String appPkg, JSONObject args) throws Exception {
         JSONObject safeArgs = args == null ? new JSONObject() : args;
+        if ("workflow.create_daily_gui".equals(name) || "workflow.get_status".equals(name)) {
+            NativeWorkflowExecutor workflow = new NativeWorkflowExecutor(context, loader);
+            JSONObject value;
+            if ("workflow.create_daily_gui".equals(name)) {
+                JSONObject scoped = new JSONObject(safeArgs.toString()).put("_requestScope", workflowScope);
+                value = workflow.createDailyGui(scoped);
+            } else value = workflow.getStatus(safeArgs.optString("request_id"));
+            return response(value.optBoolean("pending") ? 202 : value.optBoolean("verified") ? 200 : 500, value.toString());
+        }
         if ("local.ui".equals(name)) {
             JSONObject value = NativeRootClient.call(safeArgs);
             return response(value.optBoolean("ok") ? 200 : 500, value.toString());

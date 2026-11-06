@@ -1033,6 +1033,26 @@ public final class Bridge {
                 .put("properties", new JSONObject().put("task_id", new JSONObject().put("type", "string")))
                 .put("required", new JSONArray().put("task_id"));
             nativeTools.put(query.name, query);
+            if (localInvoker != null && stateDir != null
+                    && new File(stateDir, "native-workflow-capabilities.json").isFile()) {
+                Tool scheduled = new Tool("workflow.create_daily_gui", "com.hihonor.magicvoice", "", null);
+                scheduled.description = "创建YOYO原生每天固定时间操控应用的定时任务，生成原生卡片。仅支持每日，非闹钟。须有真实已安装应用包名。";
+                scheduled.schema = new JSONObject().put("type", "object").put("properties", new JSONObject()
+                    .put("hour", new JSONObject().put("type", "integer").put("minimum", 0).put("maximum", 23))
+                    .put("minute", new JSONObject().put("type", "integer").put("minimum", 0).put("maximum", 59))
+                    .put("app_name", new JSONObject().put("type", "string"))
+                    .put("pkg_name", new JSONObject().put("type", "string"))
+                    .put("task_query", new JSONObject().put("type", "string")))
+                    .put("required", new JSONArray().put("hour").put("minute").put("app_name").put("pkg_name").put("task_query"))
+                    .put("additionalProperties", false);
+                nativeTools.put(scheduled.name, scheduled);
+                Tool status = new Tool("workflow.get_status", "com.hihonor.magicvoice", "", null);
+                status.description = "查询定时任务保存状态，request_id来自创建结果；pending时查询本工具，不得重复创建。";
+                status.schema = new JSONObject().put("type", "object").put("properties", new JSONObject()
+                    .put("request_id", new JSONObject().put("type", "string")))
+                    .put("required", new JSONArray().put("request_id")).put("additionalProperties", false);
+                nativeTools.put(status.name, status);
+            }
             if (config.optBoolean("localExecution", false) && localInvoker != null) {
                 Tool local = new Tool("local.ui", "com.hihonor.magicvoice", "", null);
                 local.description = "原生YOYO应用工具明确失败或目录中没有相应能力时，作为可选的本机界面操作fallback：open_app打开包名，read读取真实界面，tap点击bounds中心，swipe滑动，back返回。每步观察后操作，不猜坐标；点赞前若已赞不要再点。";
@@ -1434,11 +1454,13 @@ public final class Bridge {
                 + "读取准确参数 schema，最后调用该原生 YOYO 工具；不要猜测复杂参数。应用操作优先选择具有准确 schema 的原生 YOYO 工具，包括 gui.create 和 task-result-query；只在原生工具明确失败或目录中确实没有相应原生能力时，才使用 local.ui 作为可选的界面操作 fallback。"
                 + (config.optBoolean("localExecution") ? "local.ui可用于fallback界面操作：先open_app或read观察真实界面，每次只执行一个动作再read确认；优先使用截图或XML中的真实bounds，不猜坐标，已观察无效后改用新观察结果。" : "")
                 + "若用户要求创建或管理定时任务，必须查找并调用实际存在的 YOYO workflow 工具；没有可调用的 workflow 工具时明确说明当前不支持，不得用闹钟替代或声称已创建。"
+                + "workflow.create_daily_gui返回pending时只查workflow.get_status；只有verified=true且workflow_ids非空才能说任务已保存，未来到点执行另行验证。不要对同一个目标重复创建。"
                 + "微信朋友圈点赞前先确认最新一条和是否已赞；已赞就保留，不要取消。"
                 + "gui.create创建任务返回task_id只代表已启动，"
                 + "必须调用task-result-query查询，is_final=false就继续查询，直到最终结果明确成功或失败。"
                 + "不要把任务创建成功说成操作完成，不要对同一未结束任务重复创建。"
-                + "工具结果返回后继续推理。\n可用手机工具（名称、应用包名、说明）：\n");
+                + "工具结果返回后继续推理。向用户简洁说明实际结果；用户未要求排障时，不列出内部函数名、request_id、workflow_ids或错误代码。已有原生任务卡时，用简短确认，避免重复输出长清单。"
+                + "\n可用手机工具（名称、应用包名、说明）：\n");
             int budget = 42000;
             for (Tool tool : availableTools()) {
                 String description = tool.description;

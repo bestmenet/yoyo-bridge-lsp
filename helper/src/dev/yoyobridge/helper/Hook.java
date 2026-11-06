@@ -64,12 +64,38 @@ public final class Hook implements IXposedHookLoadPackage {
         if (!TARGET_PACKAGE.equals(loadPackageParam.packageName)) return;
         targetClassLoader = loadPackageParam.classLoader;
         NativeTrace.install(loadPackageParam.classLoader);
+        installNativeWorkflowLearning(loadPackageParam.classLoader);
+        installConversationBoundary(loadPackageParam.classLoader);
         installEmbeddedRuntime(loadPackageParam);
         installNativeTextBridge(loadPackageParam.classLoader);
         installModelListHook(loadPackageParam.classLoader);
         installCapabilityGateHooks(loadPackageParam.classLoader);
         installAllAppPolicyHooks(loadPackageParam.classLoader);
         installWechatExecutionPolicy(loadPackageParam.classLoader);
+    }
+
+    private static void installNativeWorkflowLearning(ClassLoader loader) {
+        try {
+            Class<?> manager = XposedHelpers.findClass(
+                "com.hihonor.magicvoice.yoyotask.shared.chat.WorkFlowMainChatManager", loader);
+            Class<?> payload = XposedHelpers.findClass(
+                "com.hihonor.magicvoice.yoyotask.core.network.websocket.response.WebSocketResponse$CommonPayload", loader);
+            XposedHelpers.findAndHookMethod(manager, "handleClientDirectiveEvent", payload, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    if (cachedContext == null || selectedCustom(loader)) return;
+                    try {
+                        Class<?> json = XposedHelpers.findClass("com.hihonor.magicvoice.phonebase.util.GsonUtils", loader);
+                        Object serialized = XposedHelpers.callStaticMethod(json, "toJson", param.args[0]);
+                        if (NativeWorkflowCapabilities.capture(cachedContext, String.valueOf(serialized)))
+                            XposedBridge.log("YOYO Bridge: native workflow metadata captured");
+                    } catch (Throwable error) {
+                        XposedBridge.log("YOYO Bridge: native workflow metadata unavailable: " + error.getClass().getSimpleName());
+                    }
+                }
+            });
+        } catch (Throwable error) {
+            XposedBridge.log("YOYO Bridge: native workflow learning unavailable: " + error.getClass().getSimpleName());
+        }
     }
 
     private static final Set<Class<?>> interceptedProviders = new HashSet<>();
@@ -114,20 +140,24 @@ public final class Hook implements IXposedHookLoadPackage {
                                     }
                                     JSONObject config = runtimeConfig;
                                     Context context = cachedContext;
-                                    String conversationKey = nativeConversationKey(loader);
+                                    long conversationGeneration = conversationBoundary.get();
+                                    String initialConversationKey = nativeConversationKey(loader);
                                     new Thread(() -> {
+                                        String conversationKey = awaitConversationKey(loader, initialConversationKey, conversationGeneration);
                                         try {
+                                            if (conversationBoundary.get() != conversationGeneration) return;
                                             Bridge.useLocalState(new File(context.getFilesDir(), "yoyo-lsp"));
                                             NativeToolExecutor executor = new NativeToolExecutor(context, loader);
                                             Bridge.runLocalTask(config, text, conversationKey, executor, (period, reply) -> {
-                                                if (!conversationKey.isEmpty() && !conversationKey.equals(nativeConversationKey(loader))) return;
-                                                if ("thinking".equals(period)) showRobot(proxy,
-                                                    "正在使用自定义模型 " + config.optString("model") + " 处理任务…");
+                                                if (conversationBoundary.get() != conversationGeneration
+                                                        || (!conversationKey.isEmpty() && !conversationKey.equals(nativeConversationKey(loader)))) return;
+                                                if ("thinking".equals(period)) showNativeLoading(proxy);
                                                 else if ("message".equals(period) && !reply.isEmpty()) showRobot(proxy, reply);
                                             });
                                         } catch (Throwable error) {
                                             XposedBridge.log("YOYO Bridge: local model task error " + error.getClass().getSimpleName());
-                                            if (conversationKey.isEmpty() || conversationKey.equals(nativeConversationKey(loader)))
+                                            if (conversationBoundary.get() == conversationGeneration
+                                                    && (conversationKey.isEmpty() || conversationKey.equals(nativeConversationKey(loader))))
                                                 showRobot(proxy, "自定义模型桥接失败，请在 YOYO Bridge 查看日志。");
                                         } finally {
                                             localTaskRunning.set(false);
@@ -151,6 +181,35 @@ public final class Hook implements IXposedHookLoadPackage {
         }
     }
 
+    private static final java.util.concurrent.atomic.AtomicLong conversationBoundary = new java.util.concurrent.atomic.AtomicLong();
+
+    private static void installConversationBoundary(ClassLoader loader) {
+        try {
+            Class<?> manager = XposedHelpers.findClass(
+                "com.hihonor.magicvoice.frameworkui.topic.FwConversationTopicManager", loader);
+            XposedHelpers.findAndHookMethod(manager, "setTopicIdInMainThread", long.class, String.class, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) { conversationBoundary.incrementAndGet(); }
+            });
+        } catch (Throwable error) {
+            XposedBridge.log("YOYO Bridge: topic switch observation unavailable: " + error.getClass().getSimpleName());
+        }
+    }
+
+    private static String awaitConversationKey(ClassLoader loader, String initial, long generation) {
+        if (!initial.isEmpty()) return initial;
+        // Input-card persistence runs on ht-topicHandler after recognizeText starts.
+        // Wait off the UI thread for its real topic ID; a user switch cancels adoption.
+        long until = android.os.SystemClock.elapsedRealtime() + 1000;
+        while (conversationBoundary.get() == generation) {
+            String key = nativeConversationKey(loader);
+            if (!key.isEmpty()) return key;
+            if (android.os.SystemClock.elapsedRealtime() >= until) break;
+            try { Thread.sleep(20); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+        }
+        return "";
+    }
+
     private static String nativeConversationKey(ClassLoader loader) {
         try {
             Class<?> manager = XposedHelpers.findClass(
@@ -158,10 +217,17 @@ public final class Hook implements IXposedHookLoadPackage {
             Object instance = XposedHelpers.callStaticMethod(manager, "getInstance");
             Object topic = XposedHelpers.callMethod(instance, "getTopicId");
             long id = topic instanceof Number ? ((Number) topic).longValue() : -1;
-            // The UI creates the topic synchronously with its first input card.
+            // The input-card worker eventually assigns the positive topic ID.
             // Pending negative IDs must never share a history cache entry.
             return id > 0 ? "topic:" + id : "";
         } catch (Throwable ignored) { return ""; }
+    }
+
+    private static void showNativeLoading(Object proxy) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try { XposedHelpers.callMethod(proxy, "sendAutoLoadingCard", false); }
+            catch (Throwable error) { XposedBridge.log("YOYO Bridge: loading card unavailable: " + error.getClass().getSimpleName()); }
+        });
     }
 
     private static void showRobot(Object proxy, String text) {
