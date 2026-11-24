@@ -1,6 +1,9 @@
 package dev.yoyobridge.helper;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -9,6 +12,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -41,6 +45,8 @@ public final class SettingsActivity extends Activity {
     private RadioButton replaceKey;
     private RadioButton clearKey;
     private TextView statusText;
+    private Button phoneUseToggle;
+    private Button phoneUsePairing;
     private TextView logText;
     private TextView feedbackText;
     private final Runnable refresh = new Runnable() {
@@ -140,6 +146,16 @@ public final class SettingsActivity extends Activity {
 
         feedbackText = text("", 13, false);
         page.addView(feedbackText);
+        page.addView(label("局域网 Phone Use"));
+        LinearLayout phoneUseRow = row(page);
+        phoneUseToggle = button("");
+        phoneUsePairing = button("查看 CLI 配对密钥");
+        phoneUseRow.addView(phoneUseToggle, weight());
+        phoneUseRow.addView(phoneUsePairing, weight());
+        phoneUseToggle.setOnClickListener(v -> togglePhoneUse());
+        phoneUsePairing.setOnClickListener(v -> showPhoneUseToken());
+        refreshPhoneUseControls();
+
         page.addView(label("连接与代理状态"));
         statusText = text("尚无状态快照", 14, false);
         statusText.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -212,6 +228,44 @@ public final class SettingsActivity extends Activity {
         }
     }
 
+    private void refreshPhoneUseControls() {
+        boolean enabled = PhoneUseServer.isToken(BridgeSettingsProvider.getPhoneUseToken(this));
+        phoneUseToggle.setText(enabled ? "停用 Phone Use" : "启用 Phone Use");
+        phoneUsePairing.setEnabled(enabled);
+    }
+
+    private void togglePhoneUse() {
+        boolean enabled = PhoneUseServer.isToken(BridgeSettingsProvider.getPhoneUseToken(this));
+        if (!BridgeSettingsProvider.setPhoneUseEnabled(this, !enabled)) {
+            appendLog("无法保存 Phone Use 设置", false);
+            return;
+        }
+        sendApplyBroadcast("phoneUse");
+        refreshPhoneUseControls();
+        appendLog(enabled ? "已请求停用 Phone Use，旧配对密钥已撤销"
+            : "已启用 Phone Use，请打开 YOYO 并用配对密钥启动 yobg-cli", false);
+    }
+
+    private void showPhoneUseToken() {
+        String token = BridgeSettingsProvider.getPhoneUseToken(this);
+        if (!PhoneUseServer.isToken(token)) return;
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("CLI 配对密钥")
+            .setMessage(token)
+            .setPositiveButton("复制", (ignored, button) -> {
+                ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+                ClipData clip = ClipData.newPlainText("YOBG_PHONE_TOKEN", token);
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    android.os.PersistableBundle extras = new android.os.PersistableBundle();
+                    extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
+                    clip.getDescription().setExtras(extras);
+                }
+                if (clipboard != null) clipboard.setPrimaryClip(clip);
+            })
+            .setNegativeButton("关闭", null).create();
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        dialog.show();
+    }
+
     private void testConnection() {
         final JSONObject config;
         try { config = makeConfig(true); }
@@ -278,6 +332,10 @@ public final class SettingsActivity extends Activity {
         JSONObject route = snapshot.optJSONObject("route");
         if (route != null) summary += "\nNext Pro: " + (route.optBoolean("customSelected", false)
             ? "已选择 YOYO Bridge" : "当前使用其他模型");
+        if (PhoneUseServer.isToken(BridgeSettingsProvider.getPhoneUseToken(this))) {
+            summary += fresh && snapshot.optBoolean("phoneUseActive")
+                ? "\nPhone Use: 等待 CLI 配对" : "\nPhone Use: 监听未就绪，请打开 YOYO";
+        }
         statusText.setText(summary);
         String log = snapshot.optString("log", "");
         if (!log.isEmpty()) appendLog(log, true);

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- 新增局域网 Phone Use 开关及 `yobg-cli`，通过 MCP Streamable HTTP 发布 YOYO 原生 GUI 创建与结果查询工具，并支持显式选取带参数 schema 的原生目录工具。
+
 ## [v2.2.0] - 2026-11-06
 
 ### Added

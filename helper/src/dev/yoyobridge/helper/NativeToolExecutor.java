@@ -173,7 +173,7 @@ public final class NativeToolExecutor implements Bridge.LocalToolInvoker {
         return invokeResult(resumed.get());
     }
 
-    private JSONObject invokeMcp(final String name, String appPkg, final JSONObject args)
+    JSONObject invokeMcp(final String name, String appPkg, final JSONObject args)
             throws Exception {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return error("MAIN_THREAD", "MCP tool invocation must run off the main thread");

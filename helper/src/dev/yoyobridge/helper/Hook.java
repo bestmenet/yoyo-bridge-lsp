@@ -242,6 +242,7 @@ public final class Hook implements IXposedHookLoadPackage {
     }
 
     private static volatile JSONObject runtimeConfig;
+    private static volatile PhoneUseServer phoneUseServer;
     private static final Uri SETTINGS = Uri.parse("content://dev.yoyobridge.helper.settings");
     private static final java.util.concurrent.ExecutorService runtimeExecutor =
         java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -275,6 +276,7 @@ public final class Hook implements IXposedHookLoadPackage {
                             context.registerReceiver(receiver, filter, "dev.yoyobridge.helper.CONTROL", null, 2 /* RECEIVER_EXPORTED */);
                         else context.registerReceiver(receiver, filter, "dev.yoyobridge.helper.CONTROL", null);
                         reload(context, "reload");
+                        runtimeExecutor.execute(() -> reload(context, "phoneUse"));
                         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                             @Override public void run() {
                                 runtimeExecutor.execute(() -> report(context));
@@ -300,6 +302,11 @@ public final class Hook implements IXposedHookLoadPackage {
     }
 
     private static void reload(Context context, String action) {
+        if ("phoneUse".equals(action)) {
+            reloadPhoneUse(context);
+            report(context);
+            return;
+        }
         try {
             readConfig(context);
             if (runtimeConfig == null) return;
@@ -337,10 +344,32 @@ public final class Hook implements IXposedHookLoadPackage {
         }
     }
 
+    private static void reloadPhoneUse(Context context) {
+        try {
+            Bundle settings = context.getContentResolver().call(SETTINGS, "phoneUse", null, null);
+            String token = settings == null ? "" : settings.getString("token", "");
+            if (phoneUseServer != null && phoneUseServer.usesToken(token)) return;
+            closePhoneUse();
+            if (PhoneUseServer.isToken(token))
+                phoneUseServer = new PhoneUseServer(context, targetClassLoader, token);
+        } catch (Exception | LinkageError error) {
+            closePhoneUse();
+            XposedBridge.log("YOYO Bridge: phone-use listener unavailable: " + error.getClass().getSimpleName());
+        }
+    }
+
+    private static void closePhoneUse() {
+        if (phoneUseServer == null) return;
+        phoneUseServer.close();
+        phoneUseServer = null;
+    }
+
     private static void report(Context context) {
         try {
             Bundle bundle = new Bundle();
-            bundle.putString("status", Bridge.embeddedStatus().toString());
+            PhoneUseServer listener = phoneUseServer;
+            bundle.putString("status", Bridge.embeddedStatus()
+                .put("phoneUseActive", listener != null && listener.isActive()).toString());
             context.getContentResolver().call(SETTINGS, "report", null, bundle);
         } catch (Throwable ignored) {}
     }
