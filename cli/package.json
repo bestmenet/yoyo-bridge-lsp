@@ -1,0 +1,17 @@
+{
+  "name": "yobg-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publish YOYO Bridge phone tools over MCP Streamable HTTP",
+  "type": "module",
+  "bin": {
+    "yobg-cli": "./yobg-cli.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0"
+  }
+}

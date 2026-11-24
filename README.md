@@ -21,6 +21,7 @@
   - 绑定 YOYO 原生 `FwConversationTopicManager` 正数话题 ID，自动等待首轮输入卡异步落库并检测话题切换，防止跨话题串话；新开话题自动从空上下文开始。
 - **原生手机工具与 GUI 自动化直连**：
   - 同一 YOYO 进程内通过 `NativeToolExecutor` 直接调用原生 `McpNodeTool`、`gui.create`（异步创建手机 GUI 操控任务）与 `task-result-query`（查询任务执行终态），并提供可选的 Root 级 `local.ui`（`RootUiBroker`）回退通道。
+  - [`yobg-cli`](cli/README.md) 可将 YOYO 原生 Phone Use 工具发布为局域网 MCP 服务。手机侧从模块设置页启用并配对，CLI 侧使用 HTTPS 与独立的访问密钥。
 - **YOYO 原生每日 GUI 定时任务卡片生成与持久化（v2.2.0）**：
   - 提供 `workflow.create_daily_gui` 与 `workflow.get_status` 工具，支持第三方模型创建真正的 **YOYO 原生定时任务**（非系统闹钟）。
   - 自动学习并净化原生工作流插件能力元数据，生成独立 26 位十进制 `workflowId`，复用原生 DSL 转换、`validateGroupTasks` 校验、`WorkFlowUseCase.addOrUpdateWorkFlow` 持久化（写入 `com.hihonor.brain`）以及 `WorkFlowCardDisplayHelper.showTrialRunCard` 原生任务卡渲染。
@@ -114,6 +115,10 @@ flowchart TD
 1. **首次学习原生工作流元数据**：如果在全新安装后尚未采集过原生工作流插件元数据，可先在 YOYO 的 `PRO` 菜单切换至“系统默认模型”，发送一次定时任务请求（例如“每天早上 8 点打开抖音查看新消息”）。模块会在后台自动学习并脱敏保存当前版本 YOYO 的工作流工具元数据（仅保留静态 `toolId`/`pluginId`/`pkgName`/`version`），随后即可停用该示例任务并切回“自定义模型”。
 2. **使用第三方模型创建原生定时任务**：在“自定义模型”下直接发送自然语言指令（如“每天早上 8 点打开抖音查看有没有新消息”），第三方模型会自动调用 `workflow.create_daily_gui` 并在聊天窗口渲染出包含“条件、操作、自动执行、编辑、执行一次”的原生定时任务卡片。
 
+### 3. 通过局域网 MCP 使用 Phone Use（主线源码）
+
+用含有本功能的源码构建 APK，在模块设置页启用 Phone Use 并打开 YOYO。在手机 Termux 或 USB 连接的电脑上运行 `yobg-cli` 后，局域网客户端可以调用 `gui.create` 和 `task-result-query`。配对与客户端配置见 [CLI 文档](cli/README.md)。
+
 ---
 
 ## 从源码构建与测试
@@ -175,6 +180,7 @@ python3 build_lsp.py
 ├── CHANGELOG.md                 # 版本演进记录 (v2.0.0 -> v2.2.0)
 ├── LICENSE                      # MIT 开源许可证
 ├── README.md                    # 项目说明文档
+├── cli/                         # yobg-cli 局域网 MCP 服务及配置文档
 ├── docs/
 │   ├── protocol-boundary.md     # YOYO Next 原生协议边界与工作流架构分析
 │   ├── prompt-analysis.md       # 端侧 VLM 规划提示词模板与云端 startDialog 核查

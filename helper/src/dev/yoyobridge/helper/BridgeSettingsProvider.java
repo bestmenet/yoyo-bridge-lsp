@@ -3,6 +3,7 @@ package dev.yoyobridge.helper;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.security.SecureRandom;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -26,6 +28,7 @@ public final class BridgeSettingsProvider extends ContentProvider {
         "wss://yoyoclaw-drcn.hiboard.hihonorcloud.com/aicloud/yoyo-claw-service/v2/yoyoclaw/connect";
     private static final String CONFIG_FILE = "config.json";
     private static final String STATUS_FILE = "status.json";
+    private static final String PHONE_TOKEN = "token";
 
     @Override public boolean onCreate() { return getContext() != null; }
     @Override public Cursor query(Uri uri, String[] projection, String selection,
@@ -81,7 +84,34 @@ public final class BridgeSettingsProvider extends ContentProvider {
         }
     }
 
+    public static String getPhoneUseToken(Context context) {
+        return phoneUseSettings(context).getString(PHONE_TOKEN, "");
+    }
+
+    public static boolean setPhoneUseEnabled(Context context, boolean enabled) {
+        SharedPreferences.Editor edit = phoneUseSettings(context).edit();
+        if (!enabled) return edit.remove(PHONE_TOKEN).commit();
+        byte[] random = new byte[32];
+        new SecureRandom().nextBytes(random);
+        StringBuilder token = new StringBuilder(64);
+        for (byte value : random) {
+            token.append(Character.forDigit((value & 255) >>> 4, 16));
+            token.append(Character.forDigit(value & 15, 16));
+        }
+        return edit.putString(PHONE_TOKEN, token.toString()).commit();
+    }
+
+    private static SharedPreferences phoneUseSettings(Context context) {
+        return context.getSharedPreferences("phone-use", Context.MODE_PRIVATE);
+    }
+
     @Override public Bundle call(String method, String arg, Bundle extras) {
+        if ("phoneUse".equals(method)) {
+            requireCaller();
+            Bundle result = new Bundle();
+            result.putString(PHONE_TOKEN, getPhoneUseToken(getContext()));
+            return result;
+        }
         if ("rootStart".equals(method)) {
             requireCaller();
             long token = Binder.clearCallingIdentity();

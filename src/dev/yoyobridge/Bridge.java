@@ -167,6 +167,24 @@ public final class Bridge {
     public interface LocalToolInvoker {
         JSONObject invoke(String name, String appPkg, JSONObject arguments) throws Exception;
     }
+
+    public static JSONArray phoneUseToolDefinitions() {
+        return new JSONArray().put(new JSONObject()
+            .put("name", "gui.create")
+            .put("description", "通过YOYO原生GUI执行器完成应用内部操作，例如微信朋友圈点赞。创建任务后必须查询最终结果。")
+            .put("inputSchema", new JSONObject().put("type", "object")
+                .put("properties", new JSONObject()
+                    .put("app_name", new JSONObject().put("type", "string").put("description", "应用中文名称，例如微信"))
+                    .put("task_query", new JSONObject().put("type", "string").put("description", "用户完整操作目标")))
+                .put("required", new JSONArray().put("app_name").put("task_query"))))
+            .put(new JSONObject()
+                .put("name", "task-result-query")
+                .put("description", "查询GUI异步任务结果；task_id来自gui.create，is_final=false时继续查询，不要重复创建任务。")
+                .put("inputSchema", new JSONObject().put("type", "object")
+                    .put("properties", new JSONObject().put("task_id", new JSONObject().put("type", "string")))
+                    .put("required", new JSONArray().put("task_id"))));
+    }
+
     public interface LocalReplyListener {
         void onReply(String period, String text);
     }
@@ -1019,20 +1037,14 @@ public final class Bridge {
         }
 
         private void registerNativeTools() {
-            Tool create = new Tool("gui.create", "com.hihonor.magicvoice", "", null);
-            create.description = "通过YOYO原生GUI执行器完成应用内部操作，例如微信朋友圈点赞。创建任务后必须查询最终结果。";
-            create.schema = new JSONObject().put("type", "object")
-                .put("properties", new JSONObject()
-                    .put("app_name", new JSONObject().put("type", "string").put("description", "应用中文名称，例如微信"))
-                    .put("task_query", new JSONObject().put("type", "string").put("description", "用户完整操作目标")))
-                .put("required", new JSONArray().put("app_name").put("task_query"));
-            nativeTools.put(create.name, create);
-            Tool query = new Tool("task-result-query", "com.hihonor.magicvoice", "", null);
-            query.description = "查询GUI异步任务结果；task_id来自gui.create，is_final=false时继续查询，不要重复创建任务。";
-            query.schema = new JSONObject().put("type", "object")
-                .put("properties", new JSONObject().put("task_id", new JSONObject().put("type", "string")))
-                .put("required", new JSONArray().put("task_id"));
-            nativeTools.put(query.name, query);
+            JSONArray phoneTools = phoneUseToolDefinitions();
+            for (int i = 0; i < phoneTools.length(); i++) {
+                JSONObject definition = phoneTools.optJSONObject(i);
+                Tool tool = new Tool(definition.optString("name"), "com.hihonor.magicvoice", "", null);
+                tool.description = definition.optString("description");
+                tool.schema = definition.optJSONObject("inputSchema");
+                nativeTools.put(tool.name, tool);
+            }
             if (localInvoker != null && stateDir != null
                     && new File(stateDir, "native-workflow-capabilities.json").isFile()) {
                 Tool scheduled = new Tool("workflow.create_daily_gui", "com.hihonor.magicvoice", "", null);
